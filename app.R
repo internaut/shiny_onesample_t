@@ -7,6 +7,7 @@
 
 library(shiny)
 library(openintro)   # for age_at_mar
+library(tibble)
 library(ggplot2)
 
 
@@ -14,7 +15,8 @@ N_HEAD <- 10
 
 
 ui <- fluidPage(
-    titlePanel('Tests of Significance on univariate data'),
+    shinyjs::useShinyjs(),
+    titlePanel('The one-sample t-test'),
     sidebarLayout(
         sidebarPanel(
             selectInput('datasource', 'Data',
@@ -23,14 +25,20 @@ ui <- fluidPage(
             actionButton('load', 'Load data')
         ),
         mainPanel(
+          h3('Assumptions'),
+          HTML('<ul>
+                   <li>the samples must be independent</li>
+                   <li>the samples must be approximately normally distributed</li>
+                   <li>the sample size must be reasonable large</li>
+                </ul>'),
            h3('Data description'),
-           h3('Assumptions'),
+           textOutput('data_descr'),
            h3('Hypotheses'),
            textOutput('true_mean_label'),
-           numericInput('true_mean', '', value = 0),
+           shinyjs::disabled(numericInput('true_mean', '', value = 0)),
            p('Alternative: True mean is'),
-           selectInput('alt_comparison', '',
-                       choices = c('≠' = 'two.sided', '<' = 'less', '>' = 'greater')),
+           shinyjs::disabled(selectInput('alt_comparison', '',
+                                         choices = c('≠' = 'two.sided', '<' = 'less', '>' = 'greater'))),
            textOutput('true_mean'),
            h3(sprintf('Data (first %d rows)', N_HEAD)),
            tableOutput('table'),
@@ -58,20 +66,25 @@ server <- function(input, output) {
         if (input$datasource == 'age_at_mar') {
             df <- age_at_mar
             unit <- 'years'
+            descr <- 'Age at first marriage of 5,534 US women who responded to the National Survey of Family Growth (NSFG) conducted by the CDC in the 2006 and 2010 cycle.'
         } else if (input$datasource == 'rivers') {
-            df <- data.frame(length = rivers * 1.609344)  # miles to km
+            df <- tibble(length = rivers * 1.609344)  # miles to km
             unit <- 'km'
+            descr <- 'This data set gives the lengths (in km) of 141 “major” rivers in North America, as compiled by the US Geological Survey.'
         } else {   # synthetic
-            
+            # TODO
         }
-      
+        
+        # take a sample
         df <- df[sample(1:nrow(df), input$samplesize), ]
         
         calc_results$y <- unlist(df[,1])
         calc_results$dof <- nrow(df) - 1
         
-      
-        list(df = df, unit = unit)
+        shinyjs::enable('true_mean')
+        shinyjs::enable('alt_comparison')
+        
+        list(df = df, unit = unit, descr = descr)
     })
     
     output$true_mean <- renderText({ input$true_mean })
@@ -85,6 +98,10 @@ server <- function(input, output) {
         comp <- 'less than or equal'
       }
       paste('Null: True mean', comp)
+    })
+    
+    output$data_descr <- renderText({
+      loaded_data()$descr
     })
     
     output$table <- renderTable({
