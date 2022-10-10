@@ -15,12 +15,15 @@ N_HEAD <- 10
 ui <- fluidPage(
   shinyjs::useShinyjs(),   # to enable/disable inputs
   withMathJax(),           # for formulas
+  tags$script(src = "custom.js"),    # custom JS
   titlePanel('The one-sample t-test'),
   sidebarLayout(
     sidebarPanel(
       selectInput('datasource', 'Data',
                   choices = c('age_at_mar', 'rivers', 'synthetic')),
       numericInput('samplesize', 'Sample size', value = 50, step = 1),
+      shinyjs::hidden(numericInput('synth_mean', 'Mean', value = 0)),
+      shinyjs::hidden(numericInput('synth_sd', 'Std. dev.', value = 1)),
       actionButton('load', 'Load data')
     ),
     mainPanel(
@@ -29,7 +32,7 @@ ui <- fluidPage(
                    <li>the samples must be independent</li>
                    <li>the samples must be approximately normally distributed</li>
                    <li>the sample size must be reasonable large</li>
-                </ul>'),
+            </ul>'),
       h3('Data description'),
       textOutput('data_descr'),
       h3('Hypotheses'),
@@ -60,6 +63,24 @@ ui <- fluidPage(
 server <- function(input, output) {
   calc_results <- reactiveValues(y = NULL, se = NULL, t = NULL, dof = NULL, p = NULL)
   
+  observeEvent(input$user_start, {
+    print(paste('received user_start at', input$user_start))
+  })
+  
+  observeEvent(input$user_end, {
+    print(paste('received user_end at', input$user_end))
+  })
+  
+  observeEvent(input$datasource, {
+    if (input$datasource == 'synthetic') {
+      shinyjs::show('synth_mean')
+      shinyjs::show('synth_sd')
+    } else {
+      shinyjs::hide('synth_mean')
+      shinyjs::hide('synth_sd')
+    }
+  })
+  
   loaded_data <- eventReactive(input$load, {
     if (input$datasource == 'age_at_mar') {
       df <- age_at_mar
@@ -72,11 +93,16 @@ server <- function(input, output) {
       descr <- 'This data set gives the lengths (in km) of 141 “major” rivers in North America, as compiled by the 
                 US Geological Survey.'
     } else {   # synthetic
-      # TODO
+      df <- tibble(synthetic = rnorm(input$samplesize, mean = input$synth_mean, sd = input$synth_sd))
+      unit <- ''
+      descr <- sprintf('Synthetic data drawn from a normal distribution with mean %.4f and SD %.4f.',
+                       input$synth_mean, input$synth_sd)
     }
     
     # take a sample
-    df <- df[sample(1:nrow(df), input$samplesize), ]
+    if (input$datasource != 'synthetic') {
+      df <- df[sample(1:nrow(df), input$samplesize), ]
+    }
     
     calc_results$y <- unlist(df[,1])
     calc_results$dof <- nrow(df) - 1
@@ -106,7 +132,7 @@ server <- function(input, output) {
   
   output$table <- renderTable({
     head(loaded_data()$df, N_HEAD)
-  })
+  }, spacing = 'xs')
   
   output$summary <- renderPrint({
     req(calc_results$y)
